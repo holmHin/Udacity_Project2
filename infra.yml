@@ -1,0 +1,304 @@
+Description: "Holm Hinrichs, Project 2 InfraStructure as Code, Infrastructure Part"
+
+Parameters: 
+  EnvironmentName: 
+    Type: String
+  CIDRVpc:
+    Description: "IP Range in VPC"
+    Type: String
+    Default: 10.0.0.0/16
+  CIDRPubSub1:
+    Type: String
+    Default: 10.0.1.0/24
+  CIDRPubSub2:
+    Type: String
+    Default: 10.0.1.0/24
+  CIDRPrivSub1:
+    Type: String
+    Default: 10.0.1.0/24
+  CIDRPrivSub2:
+    Type: String 
+    Default: 10.0.1.0/24
+
+  EnvironmentIdentifier:
+    Description: A handle to identify the components on the environment
+    Type: String
+
+Resources:
+  # ---Main Infrastructure--- 
+  ProjectVPC:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: !Ref CIDRVpc
+      EnableDnsHostnames: true
+      Tags: 
+        - Key: EnvironmentName
+          Value: !Ref EnvironmentName
+  
+
+
+  # InternetGateway        
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags: 
+        - Key: EnvironmentName
+          Value: !Ref EnvironmentName
+  
+  InternetVPCGatewayAttac:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref ProjectVPC
+
+
+
+
+  
+  # ---SubNets ----
+  PubSub1:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      VpcId: !Ref ProjectVPC
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Ref CIDRPubSub1
+      Tags: 
+        - Key: EnvironmentName
+          Value: !Ref EnvironmentName
+  PubSub2:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      VpcId: !Ref ProjectVPC
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Ref CIDRPubSub2
+      Tags: 
+        - Key: EnvironmentName
+          Value: !Ref EnvironmentName
+  PrivSub1:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      VpcId: !Ref ProjectVPC
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Ref CIDRPrivSub1
+      Tags: 
+        - Key: EnvironmentName
+          Value: !Ref EnvironmentName
+  PrivSub2:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      VpcId: !Ref ProjectVPC
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Ref CIDRPrivSub2
+      Tags: 
+        - Key: EnvironmentName
+          Value: !Ref EnvironmentName
+
+
+
+
+  #  --- Elastic IPs ----
+  EIP1:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetVPCGatewayAttac
+    Properties:
+      Domain: vpc
+      Tags: 
+        - Key: EnvironmentName
+          Value: !Ref EnvironmentName
+  EIP2:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetVPCGatewayAttac
+    Properties:
+      Domain: vpc
+      Tags: 
+        - Key: EnvironmentName
+          Value: !Ref EnvironmentName
+
+
+
+  # --- NAT Gateways ---
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+        SubnetId: !Ref PubSub1
+        AllocationId: !GetAtt EIP1.AllocationId
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+        SubnetId: !Ref PubSub2
+        AllocationId: !GetAtt EIP2.AllocationId
+  
+  
+  
+  # --- Routing Block -----
+
+  #   - Public Subnet Routing .
+
+  PubRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        !Ref ProjectVPC
+      Tags: 
+        - Key: EnvironmentName
+          Value: !Ref EnvironmentName
+
+
+  PubRoute: 
+    Type: AWS::EC2::Route
+    DependsOn: InternetGateway
+    Properties:
+      RouteTableId:
+        !Ref PubRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        !Ref InternetGateway
+  
+  PubSub1RouteTabelAssoc:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId:     !Ref PubSub1
+        RouteTableId: !Ref PubRouteTable
+  PubSub2RouteTabelAssoc:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId:     !Ref PubSub2
+        RouteTableId: !Ref PubRouteTable
+
+  #   - Private Subnet Routing .
+
+  #     AZ 1
+  PrivRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        !Ref ProjectVPC
+      Tags: 
+        - Key: EnvironmentName
+          Value: !Ref EnvironmentName
+
+  PrivRoute1: 
+    Type: AWS::EC2::Route
+    DependsOn: InternetGateway
+    Properties:
+      RouteTableId:
+        !Ref PrivRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        !Ref NatGateway1
+
+  PrivSub1RouteTabelAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:     !Ref PrivSub1
+      RouteTableId: !Ref PrivRouteTable1
+
+  #     AZ 2
+  PrivRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        !Ref ProjectVPC
+      Tags: 
+        - Key: EnvironmentName
+          Value: !Ref EnvironmentName
+
+  PrivRoute2: 
+    Type: AWS::EC2::Route
+    DependsOn: InternetGateway
+    Properties:
+      RouteTableId:
+        !Ref PrivRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        !Ref NatGateway2
+
+  PrivSub2RouteTabelAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:     !Ref PrivSub2
+      RouteTableId: !Ref PrivRouteTable2
+
+
+
+
+
+
+# ---------- OUTPUTS-------------
+Outputs: 
+
+  VPC:
+    Description: The Project 2 VPC
+    Value: !Ref ProjectVPC
+    Export: 
+        Name: !Sub ${EnvironmentIdentifier}-ProjectVPC
+  PubSub1:
+    Value: !Ref PubSub1
+    Export: 
+        Name: !Sub ${EnvironmentIdentifier}-PUBSUB1
+  PubSub2:
+    Value: !Ref PubSub2
+    Export: 
+        Name: !Sub ${EnvironmentIdentifier}-PUBSUB2
+  PrivSub1:
+    Value: !Ref PrivSub1
+    Export: 
+        Name: !Sub ${EnvironmentIdentifier}-PRIVSUB1
+  PrivSub2:
+    Value: !Ref PrivSub2
+    Export: 
+        Name: !Sub ${EnvironmentIdentifier}-PRIVSUB2
+  
+  PubSubs:
+        Description: All public sub nets
+        Value: !Join [ ",", [ !Ref PubSub1, !Ref PubSub2 ]]
+        Export:
+          Name: !Sub ${EnvironmentIdentifier}-PUBSUBS
+
+  PrivSubs:
+        Description: All public sub nets
+        Value: !Join [ ",", [ !Ref PrivSub1, !Ref PrivSub2 ]]
+        Export:
+          Name: !Sub ${EnvironmentIdentifier}-PRIVSUBS
+
+
+  EIP1:
+    Value: !Ref EIP2
+    Description: The Elastic IP in AZ 1
+    Export: 
+      Name: !Sub ${EnvironmentIdentifier}-EIP1
+  EIP2:
+    Value: !Ref EIP2
+    Description: The Elastic IP in AZ 2
+    Export: 
+      Name: !Sub ${EnvironmentIdentifier}-EIP2
+
+  AZ1:
+    Value: !Select [0, !GetAZs '']
+    Description: The Used AZ1 for this environment
+    Export:
+      Name: !Sub ${EnvironmentIdentifier}-AZ1
+  AZ2:
+    Value: !Select [1, !GetAZs '']
+    Description: The Used AZ2 for this environment
+    Export:
+      Name: !Sub ${EnvironmentIdentifier}-AZ2
+
+      
+
+
+
+  
+  
+  
+
+
+  
+  
+  
+
+      
+  
+    
+
+

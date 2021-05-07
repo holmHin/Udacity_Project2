@@ -1,0 +1,33 @@
+[
+    {
+        "ParameterKey": "EnvironmentName",
+		"ParameterValue": "Project2_Holm"
+    },
+    
+    {
+        "ParameterKey": "EnvironmentIdentifier",
+		"ParameterValue": "UdaPrj2-holm"
+    },
+    {
+        "ParameterKey": "CIDRVpc",
+		"ParameterValue": "10.0.0.0/16"
+    },
+    {
+        "ParameterKey": "CIDRPubSub1",
+		"ParameterValue": "10.0.1.0/24"
+    },
+    {
+        "ParameterKey": "CIDRPubSub2",
+		"ParameterValue": "10.0.2.0/24"
+    },
+    {
+        "ParameterKey": "CIDRPrivSub1",
+		"ParameterValue": "10.0.3.0/24"
+    },
+    {
+        "ParameterKey": "CIDRPrivSub2",
+		"ParameterValue": "10.0.4.0/24"
+    }
+
+
+]

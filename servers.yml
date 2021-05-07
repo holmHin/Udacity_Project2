@@ -1,0 +1,224 @@
+Description: "Holm Hinrichs, Project 2 InfraStructure as Code, Server Part"
+
+Parameters: 
+  EnvironmentName: 
+    Type: String
+  EnvironmentIdentifier:
+    Description: A handle to identify the components on the environment
+    Type: String
+  InstanceAMI:
+    Description: The AMI for the mashines to be used!
+    Type: String
+  InstanceDiskSpaceInGB:
+    Description: The size of mounted Disks
+    Type: String
+    Default: '10'
+  AGMaxInstance:
+    Description: Maximum instances of servers pulled up!
+    Type: String
+    Default: '2'
+  AGMinInstance:
+    Description: Minimum instances of servers pulled up!
+    Type: String
+    Default: '1'
+
+
+Resources: 
+
+# --- IAM Role ---
+  IAMProfile:
+    Type: AWS::IAM::InstanceProfile
+    DependsOn: Project2S3ReadOnlyEC2
+    Properties: 
+      Roles:
+        - !Ref Project2S3ReadOnlyEC2
+  
+  Project2S3ReadOnlyEC2: 
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+
+  Project2Policies: 
+    Type: "AWS::IAM::Policy"
+    Properties: 
+      PolicyName: "Project2ReadS3Policy"
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Action: 
+            - "s3:Get*"
+            - "s3:List*"
+            Resource: "*"
+      Roles: 
+        - Ref: "Project2S3ReadOnlyEC2"
+  
+
+# --- Security Groups ---
+  PublicSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SecurityGroup for the public Subnets (LoadBalancer)
+      VpcId: 
+        Fn::ImportValue:
+          !Sub ${EnvironmentIdentifier}-ProjectVPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+  PrivateSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SecurityGroup for the private Subnets (LoadBalancer)
+      VpcId: 
+        Fn::ImportValue:
+          !Sub ${EnvironmentIdentifier}-ProjectVPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+
+
+
+# --- Launch Configuration ---
+  Project2LaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install unzip awscli -y
+          apt-get install apache2 -y
+          systemctl start apache2.service
+          cd /var/www/html
+          #aws s3 cp s3://udacity-demo-1/udacity.zip .
+          wget udacity-demo-1.s3.amazonaws.com/udacity.zip   
+          unzip -o udacity.zip         
+      ImageId: !Ref InstanceAMI
+      KeyName: holmsKey
+      SecurityGroups:
+      - Ref: PublicSecGroup
+      InstanceType: t3.medium
+      IamInstanceProfile: !Ref IAMProfile
+      BlockDeviceMappings:
+      - DeviceName: "/dev/sdk"
+        Ebs:
+          VolumeSize: !Ref InstanceDiskSpaceInGB
+
+ 
+  # ----- Deployment Block-------
+  # ---   Taget Group     ---
+  TargetGroupHTTP:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId: 
+        Fn::ImportValue:
+          Fn::Sub: ${EnvironmentIdentifier}-ProjectVPC
+ 
+ # -- AutoscalingGroup -- 
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+      - Fn::ImportValue: 
+          !Sub ${EnvironmentIdentifier}-PRIVSUBS
+      LaunchConfigurationName:
+        Ref: Project2LaunchConfig
+      MinSize: '4'
+      MaxSize: '4'
+      TargetGroupARNs:
+      - Ref: TargetGroupHTTP
+  
+  # --- Load Balancer --- 
+  LoadBalancerHTTP:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets:
+      - Fn::ImportValue: !Sub ${EnvironmentIdentifier}-PUBSUB1
+      - Fn::ImportValue: !Sub ${EnvironmentIdentifier}-PUBSUB2
+      SecurityGroups:
+      - Ref: PublicSecGroup
+ # - Listener - 
+  ELBListenerHTTP:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupARN:
+          Ref: TargetGroupHTTP
+      LoadBalancerArn: 
+        Ref:   LoadBalancerHTTP
+      Port: '80'
+      Protocol: HTTP
+  ELBListenerRule:
+      Type: AWS::ElasticLoadBalancingV2::ListenerRule
+      Properties:
+        Actions:
+        - Type: forward
+          TargetGroupArn: !Ref 'TargetGroupHTTP'
+        Conditions:
+        - Field: path-pattern
+          Values: [/]
+        ListenerArn: !Ref 'ELBListenerHTTP'
+        Priority: 1
+
+Outputs:
+  LoadBalancer:
+    Description: The LoadBalancer
+    Value: !Ref ELBListenerHTTP
+    Export: 
+      Name: !Sub ${EnvironmentIdentifier}-ELBListenerHTTP
+  LoadBalancerDNS:
+    Description: The DNS Name of the Load Balancer
+    Value: !GetAtt LoadBalancerHTTP.DNSName
+    Export:
+      Name: !Sub ${EnvironmentIdentifier}-DNS-Name
+
+
+
+
+      
+
+
+
+  
+
+
+      
+
+
+    
+  
+
+  

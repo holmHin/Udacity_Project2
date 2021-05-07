@@ -1,0 +1,29 @@
+[
+    {
+        "ParameterKey": "EnvironmentName",
+		"ParameterValue": "Project2_Holm"
+    },
+    
+    {
+        "ParameterKey": "EnvironmentIdentifier",
+		"ParameterValue": "UdaPrj2-holm"
+    },
+    {
+        "ParameterKey": "AGMaxInstance",
+		"ParameterValue": "4"
+    } ,
+    {
+        "ParameterKey": "AGMinInstance",
+		"ParameterValue": "4"
+    }, 
+    {
+        "ParameterKey": "InstanceAMI",
+		"ParameterValue": "ami-090717c950a5c34d3"
+    }, 
+    {
+        "ParameterKey": "InstanceDiskSpaceInGB",
+		"ParameterValue": "10"
+    } 
+ 
+
+]
