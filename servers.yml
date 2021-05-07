@@ -118,7 +118,6 @@ Resources:
           wget udacity-demo-1.s3.amazonaws.com/udacity.zip   
           unzip -o udacity.zip         
       ImageId: !Ref InstanceAMI
-      KeyName: holmsKey
       SecurityGroups:
       - Ref: PublicSecGroup
       InstanceType: t3.medium
